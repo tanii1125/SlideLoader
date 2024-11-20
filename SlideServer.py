@@ -64,6 +64,9 @@ app.config['ROI_FOLDER'] = "/images/roiDownload"
 download_folder = os.getenv('DOWNLOAD_FOLDER', app.config['UPLOAD_FOLDER'])
 app.config['DOWNLOAD_FOLDER'] = download_folder
 
+if os.getenv("ALLOW_DOWNLOAD_ZIP") == "True":
+    ALLOWED_EXTENSIONS.add("zip")
+
 #creating a uploading folder if it doesn't exist
 if not os.path.exists(app.config['TEMP_FOLDER']):
     os.mkdir(app.config['TEMP_FOLDER'])
