@@ -61,6 +61,9 @@ app.config['TOKEN_SIZE'] = 10
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ROI_FOLDER'] = "/images/roiDownload"
 
+download_folder = os.getenv('DOWNLOAD_FOLDER', app.config['UPLOAD_FOLDER'])
+app.config['DOWNLOAD_FOLDER'] = download_folder
+
 #creating a uploading folder if it doesn't exist
 if not os.path.exists(app.config['TEMP_FOLDER']):
     os.mkdir(app.config['TEMP_FOLDER'])
@@ -313,7 +316,7 @@ def getSlide(image_name):
     image_name = secure_relative_path(image_name)
     if not verify_extension(image_name):
         return flask.Response(json.dumps({"error": "Bad image type requested"}), status=400, mimetype='text/json')
-    folder = app.config['UPLOAD_FOLDER']
+    folder = app.config['DOWNLOAD_FOLDER']
     if os.sep in image_name:
         folder_and_file = image_name.rsplit(os.sep, 1)
         folder = os.path.join(folder, folder_and_file[0])
