@@ -31,6 +31,8 @@ from time import sleep
 import hashlib
 from urllib.parse import urlparse
 from dicomweb_client.api import DICOMwebClient
+import aiohttp
+import asyncio
 
 from DicomAnnotUtils import dicomToCamic
 import pydicom
@@ -58,6 +60,12 @@ app.config['TEMP_FOLDER'] = "/images/uploading/"
 app.config['TOKEN_SIZE'] = 10
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ROI_FOLDER'] = "/images/roiDownload"
+
+download_folder = os.getenv('DOWNLOAD_FOLDER', app.config['UPLOAD_FOLDER'])
+app.config['DOWNLOAD_FOLDER'] = download_folder
+
+if os.getenv("ALLOW_DOWNLOAD_ZIP") == "True":
+    ALLOWED_EXTENSIONS.add("zip")
 
 #creating a uploading folder if it doesn't exist
 if not os.path.exists(app.config['TEMP_FOLDER']):
@@ -311,7 +319,7 @@ def getSlide(image_name):
     image_name = secure_relative_path(image_name)
     if not verify_extension(image_name):
         return flask.Response(json.dumps({"error": "Bad image type requested"}), status=400, mimetype='text/json')
-    folder = app.config['UPLOAD_FOLDER']
+    folder = app.config['DOWNLOAD_FOLDER']
     if os.sep in image_name:
         folder_and_file = image_name.rsplit(os.sep, 1)
         folder = os.path.join(folder, folder_and_file[0])
@@ -775,7 +783,7 @@ def find_referenced_image_by_files(source_url, study, ds):
     # If the instance is not found in the study
     return None, None
 
-def downloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn):
+def OLDdownloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn):
     instance_url = source_url + f"/studies/{study_uid}/series/{series_uid}/instances/{instance_uid}"
     response = requests.get(instance_url, stream=True)
     if response.status_code == 200:
@@ -788,9 +796,9 @@ def downloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn)
                 if chunk:
                     if not dicom_started:
                         # Check if the chunk contains "\r\n\r\n""
-                        if b"\r\n\r\n" in chunk:
+                        start_idx = chunk.find(b"\r\n\r\n")
+                        if start_idx != -1:
                             # Find the position of "\r\n\r\n"" in the chunk
-                            start_idx = chunk.find(b"\r\n\r\n")
                             file.write(chunk[start_idx + 4:])
                             # Set dicom_started to True
                             dicom_started = True
@@ -804,6 +812,34 @@ def downloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn)
         print("DICOM instance saved successfully.")
     else:
         print(f"Failed to retrieve DICOM instance. Status code: {response.status_code}")
+
+def downloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn):
+    asyncio.run(doDownloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn))
+
+async def doDownloadRawDicom(source_url, study_uid, series_uid, instance_uid, output_fn):
+    instance_url = source_url + f"/studies/{study_uid}/series/{series_uid}/instances/{instance_uid}"
+    async with aiohttp.ClientSession(trust_env=True) as session:
+        async with session.get(instance_url) as resp:
+            reader = aiohttp.MultipartReader.from_response(resp)
+            metadata = None
+            filedata = None
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                else:
+                    #print(dir(part))
+                    #filedata = await part.read(decode=False)
+                    app.logger.info("Working on file: " +  output_fn)
+                    with open(output_fn, 'wb') as fd:
+                        while True:
+                            part_chunk = await part.read_chunk(1024*1024)
+                            if part_chunk is None or len(part_chunk)==0:
+                                break
+                            else:
+                                fd.write(part_chunk)
+
+
 
 # dicom web based routes
 
