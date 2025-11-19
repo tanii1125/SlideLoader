@@ -61,6 +61,7 @@ app.config['TOKEN_SIZE'] = 10
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['ROI_FOLDER'] = "/images/roiDownload"
 
+
 download_folder = os.getenv('DOWNLOAD_FOLDER', app.config['UPLOAD_FOLDER'])
 app.config['DOWNLOAD_FOLDER'] = download_folder
 
@@ -70,7 +71,6 @@ if os.getenv("ALLOW_DOWNLOAD_ZIP") == "True":
 #creating a uploading folder if it doesn't exist
 if not os.path.exists(app.config['TEMP_FOLDER']):
     os.mkdir(app.config['TEMP_FOLDER'])
-
 
 # should be used instead of secure_filename to create new files whose extensions are important.
 # use secure_filename to access previous files.
@@ -172,7 +172,20 @@ def start_upload():
 @app.route('/upload/continue/<token>', methods=['POST'])
 def continue_file(token):
     token = secure_filename(token)
-    print(token, file=sys.stderr)
+    # print(token, file=sys.stderr)
+
+    ## Masking the token --
+    def _mask_token(token, keep_prefix=2, keep_suffix=2):
+        try:
+            if not token or len(token) <= keep_prefix + keep_suffix:
+                return "****"
+            return token[:keep_prefix] + "*" * (len(token) - keep_prefix - keep_suffix) + token[-keep_suffix:]
+        except Exception:
+            return "****"
+
+    masked = _mask_token(token)
+    app.logger.info(f"[upload] continue called for token={masked}")
+
     tmppath = os.path.join(app.config['TEMP_FOLDER'], token)
     if os.path.isfile(tmppath):
         body = flask.request.get_json()
